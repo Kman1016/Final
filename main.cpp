@@ -47,7 +47,7 @@ Thread t_DeterDist, t_prepare, t_erpc;
 
 bool ControlMode = 0;
 int npattern, pattern;
-double nspeed, speed = 20, MaxSpeed = 40, minSpeed = -30;
+double lastspeed = 40, speed = 20, MaxSpeed = 45, minSpeed = -30;
 
 
 
@@ -71,7 +71,7 @@ void AutoMode();
 int main() {
 
     t_DeterDist.start(DeterDist);
-    t_prepare.start(Prepare);
+    //t_prepare.start(Prepare);
     t_erpc.start(AutoMode);
 
     // Initialize the rpc server
@@ -96,14 +96,19 @@ int main() {
 }
 
 void AutoMode() {
+    int lastPattern = (int)qti1;;
+    int pat;
     car.goStraight(50);
-    while (1) {
-        pattern = npattern;
-        speed = nspeed;
+    while (!ControlMode) {
+        pattern = (int)qti1;
+
+        speed = pattern == lastPattern? lastspeed + 3: lastspeed -2;
+        speed = speed > 45? 45 : speed;
+        speed = speed < -20? -20: speed;
         // bright 0
-        //printf("%f  %d\n",speed, pattern);
-        if (!ControlMode)
-            switch (pattern) {
+        printf("%f  %d\n",speed, pattern);
+        
+        switch (pattern) {
                 // turn right
                 case 0b0111: car.turn(speed, -0.001); break;
                 case 0b0011: car.turn(speed, -0.08); break;
@@ -116,47 +121,63 @@ void AutoMode() {
                 case 0b0100: car.turn(speed, 0.05); break;
                 case 0b1100: car.turn(speed, 0.08); break;
                 case 0b1110: car.turn(speed, 0.001); break;
-                case 0b0000: car.goCertainDistance(3); ThisThread::sleep_for(100ms);break;
+                case 0b0000: 
+                        car.goStraight(28);
+                        break;
 
-                case 0b1101:    
-                        car.goCertainDistance(3); ThisThread::sleep_for(500ms);
-                        while((int)qti1 != 0b0110) {
-                            car.turn(speed, -0.08);
-                            ThisThread::sleep_for(100ms);
+                case 0b1010:    
+                        {
+                        car.goStraight(28);
+                        ThisThread::sleep_for(10ms);
+                        car.turn(35, -0.001);
+                        ThisThread::sleep_for(10ms);
+                        car.turn(40, 0.1);
+                        ThisThread::sleep_for(10ms);
                         }
                         break;
-                case 0b1011: 
-                        car.goCertainDistance(3); ThisThread::sleep_for(500ms);
-                        while((int)qti1 != 0b0110) {
-                            car.turn(speed, 0.08);
-                            ThisThread::sleep_for(100ms);
+                case 0b0101: 
+                        {
+                        car.goStraight(28);
+                        ThisThread::sleep_for(10ms);
+                        car.turn(35, 0.001);
+                        ThisThread::sleep_for(10ms);
+                        car.turn(40, 0.1);
+                        ThisThread::sleep_for(10ms);
+                        
                         }
                         break;
                 //case 0b1101:
                 //case 0b1011:
                 // slit 
                 case 0b1001: 
+                    lcd.cls();
+                    lcd.printf("Y\n");
                     car.stop();
-
+                    ThisThread::sleep_for(10ms);
+                    car.turn(35, 0.001);
+                    ThisThread::sleep_for(10ms);
 
                 default: car.goStraight(40);
             }
-        
-        ThisThread::sleep_for(3ms);
+        lastPattern = pattern;
+        ThisThread::sleep_for(10ms);
     }    
 }
-
+ 
 void DeterDist() {
     int angles0[2] = {0};
     int angles1[2] = {0};
     int cnt = 0;
     int ang_temp0, ang_temp1;
     float dist1, dist0;
+    int pat = int(qti1);
     while (1) {
+        pat = int(qti1);
         ang_temp0 = car.servo0.angle;
         ang_temp1 = car.servo1.angle;
-        if (pattern == 0b1111) {
-            printf("%d: %d\n",cnt++ ,pattern);
+        if (pat == 15) {
+            printf("%d: %d\n",cnt++ ,pat);
+            lcd.printf("%d cnt: %d\n",pat, cnt);
             angles0[1] = angles0[0];
             angles0[0] = ang_temp0;
             angles1[1] = angles1[0];
@@ -164,46 +185,24 @@ void DeterDist() {
             if ((angles0[1] != 0 && angles0[0] != 0) || (angles1[1] != 0 && angles1[0] != 0)) {
                 dist0 = abs(angles0[0] - angles0[1])*6.5*3.14159/360;
                 dist1 = abs(angles1[0] - angles1[1])*6.5*3.14159/360;
-                if (dist0>dist1) 
+                if (dist0>dist1) {
                     printf("%f\n",dist0);
-                else
+                    lcd.cls();
+                    lcd.printf("dist: %d\n",(int)dist0);
+                    ThisThread::sleep_for(1s);
+                    
+                    }
+                else{
                     printf("%f\n",dist1);
+                    lcd.cls();
+                    lcd.printf("dist: %d\n",(int)dist0);
+                    ThisThread::sleep_for(1s);
+                    
+                }
             }
-            ThisThread::sleep_for(1s);
+            ThisThread::sleep_for(2s);
         }
         ThisThread::sleep_for(1ms);
-    }
-}
-
-void Prepare() {
-    int delta = 0;
-    while (1) {
-        npattern = (int)qti1;
-        switch (npattern) {
-            // turn right
-            case 0b0111: delta = npattern == pattern? delta + 1 : delta - 1; break;
-            case 0b0011: delta = npattern == pattern? delta + 5 : delta - 3; break;
-            case 0b0010: delta = npattern == pattern? delta + 3 : delta - 3; break;
-            case 0b0001: delta = npattern == pattern? delta + 5 : delta - 3; break;
-
-            case 0b0110: delta = npattern == pattern? delta + 1 : delta - 3; break;
-            // turn left
-            case 0b1000: delta = npattern == pattern? delta + 5 : delta - 3; break;
-            case 0b0100: delta = npattern == pattern? delta + 3 : delta - 3; break;
-            case 0b1100: delta = npattern == pattern? delta + 5 : delta - 3; break;
-            case 0b1110: delta = npattern == pattern? delta + 1 : delta - 1; break;
-
-            case 0b0000: delta = npattern == pattern? -10 : 0; break;
-            default: delta = 1;
-        }
-        delta = (delta) > 10? 10 : delta;
-        delta = (delta) < -10? -10 : delta;
-        nspeed = speed + delta;
-        nspeed = nspeed > MaxSpeed? MaxSpeed : nspeed;
-        nspeed = nspeed < minSpeed? minSpeed : nspeed;
-        delta = delta < 0? 0 : delta-1;
-        ThisThread::sleep_for(1ms);
-        //printf("%f\n",nspeed);
     }
 }
 
@@ -275,8 +274,8 @@ void eRPCmain() {
 }
 
 void RemoteShowPattern() {
-    printf("pattern: %d\n",pattern);
-    lcd.printf("pattern: %d\n", int(pattern));
+    printf("pattern: %d\n",(int)qti1);
+    lcd.printf("pattern: %d\n", int(qti1));
     ThisThread::sleep_for(1s);
     lcd.cls();
 }
